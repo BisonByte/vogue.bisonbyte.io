@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vogue-shein</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="app-script" type="text/plain" data-src="./assets/index-Bz4wWbGl.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CidzUtdd.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Client helper to persist data to the new backend API.
+      (function(){
+        const api = {
+          save: async (key, value) => {
+            const res = await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) });
+            return res.json();
+          },
+          load: async (key) => {
+            const res = await fetch('/api/load?key=' + encodeURIComponent(key));
+            return res.json();
+          },
+          addItem: async (data) => {
+            const res = await fetch('/api/item', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ data }) });
+            return res.json();
+          },
+          items: async () => {
+            const res = await fetch('/api/items');
+            return res.json();
+          },
+          export: async () => { const r = await fetch('/api/export'); return r.json(); },
+          import: async (payload) => { const r = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); return r.json(); }
+        };
+        window.appDB = api;
+      })();
+    </script>
+    <script>
+      // Automatic sync between localStorage and server-side kv store.
+      (function(){
+        const originSave = window.localStorage && window.localStorage.setItem.bind(window.localStorage);
+        const originRemove = window.localStorage && window.localStorage.removeItem.bind(window.localStorage);
+
+        function loadAppScript() {
+          const mainScriptTag = document.getElementById('app-script');
+          if (mainScriptTag && mainScriptTag.dataset.src) {
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.crossOrigin = true;
+            script.src = mainScriptTag.dataset.src;
+            document.head.appendChild(script);
+          }
+        }
+
+        async function fetchServerKV(){
+          try{
+            const res = await fetch('/api/export');
+            if(!res.ok) return null;
+            const data = await res.json();
+            return data.kv || {};
+          }catch(e){ console.warn('Could not fetch server KV', e); return null; }
+        }
+
+        async function serverSave(key, value){
+          try{
+            await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) });
+          }catch(e){ console.warn('serverSave failed', e); }
+        }
+
+        async function serverDelete(key){
+          try{
+            await fetch('/api/delete?key=' + encodeURIComponent(key), { method: 'DELETE' });
+          }catch(e){ console.warn('serverDelete failed', e); }
+        }
+
+        // On load: populate localStorage from server kv (server wins)
+        document.addEventListener('DOMContentLoaded', async ()=>{
+          try {
+            const kv = await fetchServerKV();
+            if(kv){
+              try{
+                Object.keys(kv).forEach(k=>{
+                  try{ localStorage.setItem(k, JSON.stringify(kv[k])); }catch(e){ localStorage.setItem(k, String(kv[k])); }
+                });
+                console.log('localStorage populated from server (kv keys):', Object.keys(kv));
+              }catch(e){ console.warn('Error populating localStorage', e); }
+            }
+          } catch(e) {
+            console.error('Failed to fetch and populate initial data', e);
+          } finally {
+            // Always load the app script, even if the data fetch fails
+            loadAppScript();
+          }
+        });
+
+        // Override setItem to sync to server
+        try{
+          Object.defineProperty(window.localStorage, 'setItem', {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: function(key, value){
+              // call original
+              originSave(key, value);
+              // try to send parsed JSON if possible
+              let parsed = value;
+              try{ parsed = JSON.parse(value); }catch(e){ /* keep raw string */ }
+              serverSave(key, parsed);
+            }
+          });
+
+          Object.defineProperty(window.localStorage, 'removeItem', {
+            configurable: true,
+            enumerable: true,
+            writable: true,
+            value: function(key){ originRemove(key); serverDelete(key); }
+          });
+        }catch(e){ console.warn('Could not override localStorage methods', e); }
+
+        // Provide helper to push all current localStorage to server
+        window.appDB = window.appDB || {};
+        window.appDB.pushAllLocalToServer = async function(){
+          try{
+            for(let i=0;i<localStorage.length;i++){
+              const k = localStorage.key(i);
+              const v = localStorage.getItem(k);
+              let parsed = v;
+              try{ parsed = JSON.parse(v); }catch(e){}
+              await serverSave(k, parsed);
+            }
+            return { ok:true };
+          }catch(e){ console.error(e); return { ok:false, error: ''+e }; }
+        };
+      })();
+    </script>
+  </body>
+</html>
