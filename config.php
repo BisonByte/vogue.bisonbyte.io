@@ -1,18 +1,14 @@
 <?php
-// Configuración base. Puedes sobreescribir cualquier valor creando config.local.php
+// Configuración base solo para MySQL (cPanel). Puedes sobreescribir cualquier valor creando config.local.php
 // o definiendo variables de entorno (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, CORS_ALLOWED_ORIGIN).
 
 $config = [
-    // Base de datos (MySQL por defecto).
-    'db_driver' => getenv('DB_DRIVER') ?: 'mysql',
+    // Base de datos (MySQL requerido; ya no hay modo SQLite).
     'db_host' => getenv('DB_HOST') ?: 'localhost',
     'db_port' => getenv('DB_PORT') ?: 3306,
     'db_name' => getenv('DB_NAME') ?: '',
     'db_user' => getenv('DB_USER') ?: '',
     'db_pass' => getenv('DB_PASS') ?: '',
-
-    // Si no hay credenciales MySQL, se usará automáticamente SQLite en este archivo.
-    'sqlite_path' => getenv('DB_SQLITE_PATH') ?: __DIR__ . '/storage/vogue.sqlite',
 
     'cors_allowed_origin' => getenv('CORS_ALLOWED_ORIGIN') ?: 'https://vogue.bisonbyte.io',
 ];

@@ -20,18 +20,16 @@ Pasos rápidos para activar MySQL en cPanel
    - Copia `config.example.php` a `config.local.php` y coloca tus datos:
      ```php
      return [
-       'db_driver' => 'mysql', // o 'sqlite' si prefieres archivo local
        'db_host' => 'localhost',
        'db_port' => 3306,
        'db_name' => 'vogue_app',
        'db_user' => 'vogue_user',
        'db_pass' => 'TU_PASSWORD',
-       'sqlite_path' => __DIR__ . '/storage/vogue.sqlite', // usado si no hay MySQL
        'cors_allowed_origin' => 'https://vogue.bisonbyte.io'
      ];
      ```
    - También puedes usar variables de entorno `DB_HOST`, `DB_NAME`, etc.
-   - Si dejas las credenciales MySQL vacías, la app usará automáticamente SQLite en `storage/vogue.sqlite`, creando las tablas al vuelo.
+   - MySQL es obligatorio; sin credenciales completas la aplicación mostrará un error.
 
 4) Probar la conexión  
    - Abre `https://tu-dominio/api/export` (autenticado) para ver que ya lee desde MySQL.  
