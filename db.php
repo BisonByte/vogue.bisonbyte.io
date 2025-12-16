@@ -17,24 +17,51 @@ function db(): PDO {
     }
 
     $config = loadConfig();
-    foreach (['db_host', 'db_name', 'db_user'] as $key) {
-        if (empty($config[$key])) {
-            throw new Exception("Falta configuración de base de datos ($key). Ajusta config.local.php o variables de entorno.");
+    $driver = strtolower($config['db_driver'] ?? 'mysql');
+
+    if ($driver === 'mysql') {
+        foreach (['db_host', 'db_name', 'db_user'] as $key) {
+            if (empty($config[$key])) {
+                // Si no hay datos de MySQL, caer a SQLite automáticamente.
+                $driver = 'sqlite';
+                break;
+            }
         }
     }
 
-    $dsn = sprintf(
-        'mysql:host=%s;dbname=%s;port=%s;charset=utf8mb4',
-        $config['db_host'],
-        $config['db_name'],
-        $config['db_port'] ?? 3306
-    );
+    if ($driver === 'sqlite') {
+        $sqlitePath = $config['sqlite_path'] ?? (__DIR__ . '/storage/vogue.sqlite');
+        $sqliteDir = dirname($sqlitePath);
+        if (!is_dir($sqliteDir)) {
+            @mkdir($sqliteDir, 0700, true);
+        }
+        $dsn = 'sqlite:' . $sqlitePath;
+        $pdo = new PDO($dsn, null, null, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+        // Asegura que las transacciones conserven locks razonables.
+        $pdo->exec('PRAGMA busy_timeout = 5000');
+    } else {
+        foreach (['db_host', 'db_name', 'db_user'] as $key) {
+            if (empty($config[$key])) {
+                throw new Exception("Falta configuración de base de datos ($key). Ajusta config.local.php o variables de entorno.");
+            }
+        }
 
-    $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false
-    ]);
+        $dsn = sprintf(
+            'mysql:host=%s;dbname=%s;port=%s;charset=utf8mb4',
+            $config['db_host'],
+            $config['db_name'],
+            $config['db_port'] ?? 3306
+        );
+
+        $pdo = new PDO($dsn, $config['db_user'], $config['db_pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]);
+    }
 
     if (!$bootstrapped) {
         ensureTables($pdo);
@@ -46,31 +73,63 @@ function db(): PDO {
     return $pdo;
 }
 
+function isSqlite(PDO $pdo): bool {
+    return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+}
+
 function ensureTables(PDO $pdo): void {
-    $queries = [
-        "CREATE TABLE IF NOT EXISTS kv_store (
-            key_name VARCHAR(191) NOT NULL PRIMARY KEY,
-            value_json LONGTEXT NULL,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS items (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            payload_json LONGTEXT NULL,
-            created_at_ms BIGINT UNSIGNED NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS clients (
-            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL,
-            producto_enlace TEXT NULL,
-            monto_pagado DECIMAL(12,2) NOT NULL DEFAULT 0,
-            direccion_envio TEXT NULL,
-            notas TEXT NULL,
-            created_at_ms BIGINT UNSIGNED NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-    ];
+    $isSqlite = isSqlite($pdo);
+    if ($isSqlite) {
+        $queries = [
+            "CREATE TABLE IF NOT EXISTS kv_store (
+                key_name TEXT NOT NULL PRIMARY KEY,
+                value_json TEXT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            "CREATE TABLE IF NOT EXISTS items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                payload_json TEXT NULL,
+                created_at_ms INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            "CREATE TABLE IF NOT EXISTS clients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                producto_enlace TEXT NULL,
+                monto_pagado REAL NOT NULL DEFAULT 0,
+                direccion_envio TEXT NULL,
+                notas TEXT NULL,
+                created_at_ms INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )"
+        ];
+    } else {
+        $queries = [
+            "CREATE TABLE IF NOT EXISTS kv_store (
+                key_name VARCHAR(191) NOT NULL PRIMARY KEY,
+                value_json LONGTEXT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            "CREATE TABLE IF NOT EXISTS items (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                payload_json LONGTEXT NULL,
+                created_at_ms BIGINT UNSIGNED NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            "CREATE TABLE IF NOT EXISTS clients (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL,
+                producto_enlace TEXT NULL,
+                monto_pagado DECIMAL(12,2) NOT NULL DEFAULT 0,
+                direccion_envio TEXT NULL,
+                notas TEXT NULL,
+                created_at_ms BIGINT UNSIGNED NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        ];
+    }
 
     foreach ($queries as $sql) {
         $pdo->exec($sql);
@@ -91,11 +150,20 @@ function decodeValue($value) {
 
 function kvSet(string $key, $value, ?PDO $pdo = null): void {
     $pdo = $pdo ?: db();
-    $stmt = $pdo->prepare(
-        "INSERT INTO kv_store (key_name, value_json, updated_at)
-         VALUES (:key_name, :value_json, NOW())
-         ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = VALUES(updated_at)"
-    );
+    $isSqlite = isSqlite($pdo);
+    if ($isSqlite) {
+        $stmt = $pdo->prepare(
+            "INSERT INTO kv_store (key_name, value_json, updated_at)
+             VALUES (:key_name, :value_json, datetime('now'))
+             ON CONFLICT(key_name) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at"
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            "INSERT INTO kv_store (key_name, value_json, updated_at)
+             VALUES (:key_name, :value_json, NOW())
+             ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = VALUES(updated_at)"
+        );
+    }
     $stmt->execute([
         ':key_name' => $key,
         ':value_json' => encodeValue($value)
@@ -277,11 +345,12 @@ function updateClient(int $id, array $payload, ?PDO $pdo = null): bool {
 
     $sets = [];
     $params = [':id' => $id];
+    $nowExpr = isSqlite($pdo) ? "datetime('now')" : 'NOW()';
     foreach ($data as $field => $value) {
         $sets[] = "$field = :$field";
         $params[':' . $field] = $value;
     }
-    $sets[] = 'updated_at = NOW()';
+    $sets[] = 'updated_at = ' . $nowExpr;
     $sql = "UPDATE clients SET " . implode(', ', $sets) . " WHERE id = :id";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
