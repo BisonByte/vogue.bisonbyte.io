@@ -4,11 +4,12 @@
 
 $config = [
     // Base de datos (MySQL requerido; ya no hay modo SQLite).
+    // Credenciales de la base creada en cPanel.
     'db_host' => getenv('DB_HOST') ?: 'localhost',
     'db_port' => getenv('DB_PORT') ?: 3306,
-    'db_name' => getenv('DB_NAME') ?: '',
-    'db_user' => getenv('DB_USER') ?: '',
-    'db_pass' => getenv('DB_PASS') ?: '',
+    'db_name' => getenv('DB_NAME') ?: 'ddiarsmuvk_vogue',
+    'db_user' => getenv('DB_USER') ?: 'ddiarsmuvk_vogue',
+    'db_pass' => getenv('DB_PASS') ?: 'CD1nb]GZ]oXQ',
 
     'cors_allowed_origin' => getenv('CORS_ALLOWED_ORIGIN') ?: 'https://vogue.bisonbyte.io',
 ];
