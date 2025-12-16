@@ -3,7 +3,6 @@
 // o definiendo variables de entorno (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, CORS_ALLOWED_ORIGIN).
 
 $config = [
-    // Base de datos (MySQL requerido; ya no hay modo SQLite).
     // Credenciales de la base creada en cPanel.
     'db_host' => getenv('DB_HOST') ?: 'localhost',
     'db_port' => getenv('DB_PORT') ?: 3306,
