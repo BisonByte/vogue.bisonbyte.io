@@ -14,34 +14,104 @@
     <script>
       // Client helper to persist data to the new backend API.
       (function(){
+        async function apiFetch(path, options = {}){
+          const res = await fetch(path, options);
+          if(res.status === 401){
+            // si no está autenticado, limpiar sesión local
+            localStorage.removeItem('vogue_sesion');
+            localStorage.removeItem('vogue_user');
+          }
+          return res;
+        }
+
         const api = {
+          login: async (username, password) => {
+            const res = await apiFetch('/api/login', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ username, password })
+            });
+            return res.json();
+          },
+          logout: async () => {
+            const res = await apiFetch('/api/logout', { method:'POST' });
+            return res.json();
+          },
+          me: async () => {
+            const res = await apiFetch('/api/me');
+            return res.json();
+          },
           save: async (key, value) => {
-            const res = await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) });
+            const res = await apiFetch('/api/save', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ key, value })
+            });
             return res.json();
           },
           load: async (key) => {
-            const res = await fetch('/api/load?key=' + encodeURIComponent(key));
+            const res = await apiFetch('/api/load?key=' + encodeURIComponent(key));
             return res.json();
           },
           addItem: async (data) => {
-            const res = await fetch('/api/item', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ data }) });
+            const res = await apiFetch('/api/item', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ data })
+            });
             return res.json();
           },
           items: async () => {
-            const res = await fetch('/api/items');
+            const res = await apiFetch('/api/items');
             return res.json();
           },
-          export: async () => { const r = await fetch('/api/export'); return r.json(); },
-          import: async (payload) => { const r = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); return r.json(); }
+          export: async () => {
+            const r = await apiFetch('/api/export');
+            return r.json();
+          },
+          import: async (payload) => {
+            const r = await apiFetch('/api/import', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(payload)
+            });
+            return r.json();
+          },
+          clients: async () => {
+            const res = await apiFetch('/api/clients');
+            return res.json();
+          },
+          addClient: async (payload) => {
+            const res = await apiFetch('/api/client', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(payload)
+            });
+            return res.json();
+          },
+          updateClient: async (id, payload) => {
+            const res = await apiFetch('/api/client', {
+              method:'PUT',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify(Object.assign({}, payload, { id }))
+            });
+            return res.json();
+          },
+          deleteClient: async (id) => {
+            const res = await apiFetch('/api/client?id=' + encodeURIComponent(id), { method:'DELETE' });
+            return res.json();
+          }
         };
-        window.appDB = api;
+        window.appDB = Object.assign(window.appDB || {}, api);
       })();
     </script>
     <script>
       // Automatic sync between localStorage and server-side kv store.
       (function(){
-        const originSave = window.localStorage && window.localStorage.setItem.bind(window.localStorage);
-        const originRemove = window.localStorage && window.localStorage.removeItem.bind(window.localStorage);
+        // Use prototype overrides to make sure we catch all setItem/removeItem calls,
+        // even if some browsers block redefining them on the instance.
+        const originSave = Storage.prototype.setItem.bind(window.localStorage);
+        const originRemove = Storage.prototype.removeItem.bind(window.localStorage);
 
         function loadAppScript() {
           const mainScriptTag = document.getElementById('app-script');
@@ -52,6 +122,12 @@
             script.src = mainScriptTag.dataset.src;
             document.head.appendChild(script);
           }
+        }
+
+        const SERVER_SYNC_EXCLUDED_KEYS = ['vogue_sesion', 'vogue_user'];
+
+        function shouldSyncKey(key){
+          return SERVER_SYNC_EXCLUDED_KEYS.indexOf(key) === -1;
         }
 
         async function fetchServerKV(){
@@ -65,7 +141,7 @@
 
         async function serverSave(key, value){
           try{
-            await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key, value }) });
+            await fetch('/api/save', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ key, value }) });
           }catch(e){ console.warn('serverSave failed', e); }
         }
 
@@ -75,6 +151,14 @@
           }catch(e){ console.warn('serverDelete failed', e); }
         }
 
+        async function safePushAll(){
+          if(window.appDB && typeof window.appDB.pushAllLocalToServer === 'function'){
+            try{ return await window.appDB.pushAllLocalToServer(); }
+            catch(e){ console.warn('pushAllLocalToServer failed', e); }
+          }
+          return { ok:false };
+        }
+
         // On load: populate localStorage from server kv (server wins)
         document.addEventListener('DOMContentLoaded', async ()=>{
           try {
@@ -82,11 +166,14 @@
             if(kv){
               try{
                 Object.keys(kv).forEach(k=>{
+                  if(!shouldSyncKey(k)) return; // no compartir sesión ni usuario
                   try{ localStorage.setItem(k, JSON.stringify(kv[k])); }catch(e){ localStorage.setItem(k, String(kv[k])); }
                 });
                 console.log('localStorage populated from server (kv keys):', Object.keys(kv));
               }catch(e){ console.warn('Error populating localStorage', e); }
             }
+            // Push any existing local data back to the server to ensure it is persisted.
+            await safePushAll();
           } catch(e) {
             console.error('Failed to fetch and populate initial data', e);
           } finally {
@@ -97,27 +184,27 @@
 
         // Override setItem to sync to server
         try{
-          Object.defineProperty(window.localStorage, 'setItem', {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value: function(key, value){
-              // call original
-              originSave(key, value);
-              // try to send parsed JSON if possible
+          Storage.prototype.setItem = function(key, value){
+            originSave(key, value);
+            if(shouldSyncKey(key)){
               let parsed = value;
               try{ parsed = JSON.parse(value); }catch(e){ /* keep raw string */ }
               serverSave(key, parsed);
             }
-          });
-
-          Object.defineProperty(window.localStorage, 'removeItem', {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value: function(key){ originRemove(key); serverDelete(key); }
-          });
+          };
+          Storage.prototype.removeItem = function(key){
+            originRemove(key);
+            if(shouldSyncKey(key)){
+              serverDelete(key);
+            }
+          };
         }catch(e){ console.warn('Could not override localStorage methods', e); }
+
+        // Periodic and on-hide sync to guarantee persistence even if overrides fail.
+        setInterval(() => { safePushAll(); }, 15000);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') safePushAll();
+        });
 
         // Provide helper to push all current localStorage to server
         window.appDB = window.appDB || {};
@@ -125,6 +212,7 @@
           try{
             for(let i=0;i<localStorage.length;i++){
               const k = localStorage.key(i);
+              if(!shouldSyncKey(k)) continue;
               const v = localStorage.getItem(k);
               let parsed = v;
               try{ parsed = JSON.parse(v); }catch(e){}
@@ -133,6 +221,40 @@
             return { ok:true };
           }catch(e){ console.error(e); return { ok:false, error: ''+e }; }
         };
+      })();
+    </script>
+    <script>
+      // Conectar el login de React con el backend (login/logout PHP).
+      (function(){
+        function isLoginForm(form){
+          if(!(form instanceof HTMLFormElement)) return !1;
+          return !!form.querySelector('input[type="password"]');
+        }
+
+        document.addEventListener('submit', function(ev){
+          const form = ev.target;
+          if(!isLoginForm(form)) return;
+          if(!window.appDB || typeof window.appDB.login !== 'function') return;
+          const userInput = form.querySelector('input[type="text"],input[type="email"]');
+          const passInput = form.querySelector('input[type="password"]');
+          if(!userInput || !passInput) return;
+          const username = userInput.value || '';
+          const password = passInput.value || '';
+          if(!username || !password) return;
+          // Llamar al backend para crear la sesión; React sigue manejando la UI.
+          window.appDB.login(username, password).catch(function(){});
+        }, true);
+
+        document.addEventListener('click', function(ev){
+          const btn = ev.target.closest('button');
+          if(!btn) return;
+          const text = (btn.textContent || '').toLowerCase();
+          if(text.includes('cerrar sesión') || text.includes('cerrar sesion') || text.includes('logout')){
+            if(window.appDB && typeof window.appDB.logout === 'function'){
+              window.appDB.logout().catch(function(){});
+            }
+          }
+        }, true);
       })();
     </script>
   </body>

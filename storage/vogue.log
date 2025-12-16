@@ -1,0 +1,12 @@
+{"time":"2025-11-26T18:30:38+00:00","ip":"66.29.148.75","user":null,"action":"login_failed","details":{"username":"admin"}}
+{"time":"2025-11-26T18:30:53+00:00","ip":"66.29.148.75","user":"admin","action":"login_success","details":{"username":"admin"}}
+{"time":"2025-11-26T21:14:25+00:00","ip":"66.29.148.75","user":"admin","action":"login_success","details":{"username":"admin"}}
+{"time":"2025-12-02T00:47:19+00:00","ip":"38.248.170.33","user":"admin","action":"login_success","details":{"username":"admin"}}
+{"time":"2025-12-02T00:47:28+00:00","ip":"38.248.170.33","user":"admin","action":"login_success","details":{"username":"admin"}}
+{"time":"2025-12-02T00:47:34+00:00","ip":"38.248.170.33","user":"admin","action":"kv_save","details":{"key":"vogue_clientes"}}
+{"time":"2025-12-02T00:47:34+00:00","ip":"38.248.170.33","user":"admin","action":"kv_save","details":{"key":"vogue_clientes"}}
+{"time":"2025-12-02T00:47:34+00:00","ip":"38.248.170.33","user":"admin","action":"kv_save","details":{"key":"vogue_transacciones"}}
+{"time":"2025-12-02T00:47:34+00:00","ip":"38.248.170.33","user":"admin","action":"kv_save","details":{"key":"vogue_clientes"}}
+{"time":"2025-12-02T00:47:34+00:00","ip":"38.248.170.33","user":"admin","action":"kv_save","details":{"key":"vogue_transacciones"}}
+{"time":"2025-12-16T16:29:23+00:00","ip":"69.16.157.42","user":"admin","action":"login_success","details":{"username":"admin"}}
+{"time":"2025-12-16T16:31:55+00:00","ip":"201.248.202.131","user":"admin","action":"login_success","details":{"username":"admin"}}
