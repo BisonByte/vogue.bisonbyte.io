@@ -1,6 +1,0 @@
-config.local.php
-storage/backups/
-storage/*.bak
-storage/data.json
-storage/data.json.bak
-.DS_Store
