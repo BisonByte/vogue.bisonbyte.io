@@ -242,8 +242,11 @@
       try {
         payloadStr = JSON.stringify(value);
       } catch (e) {}
+      
+      // FIX: Si lo que intentamos guardar es idéntico a lo último que bajamos del servidor, NO guardar.
+      // Esto evita que al cargar la página se reenvíen los datos sin cambios.
       if (payloadStr && lastSynced[key] === payloadStr) {
-        console.log('[app-bridge] serverSave(' + key + ') skipped - no change since last sync');
+        console.log('[app-bridge] serverSave(' + key + ') skipped - matches lastSynced');
         return;
       }
       if (payloadStr) lastSynced[key] = payloadStr;
@@ -341,23 +344,25 @@
           Object.keys(kv).forEach((k) => {
             if (!shouldSyncKey(k)) return;
             const serverVal = kv[k];
-            try {
-              lastSynced[k] = JSON.stringify(serverVal);
-            } catch (e) {}
+            const serverJson = JSON.stringify(serverVal);
+            
+            // ACTUALIZACIÓN CLAVE: Registrar que esto es lo que hay en el server
+            lastSynced[k] = serverJson;
 
-            const localRaw = localStorage.getItem(k);
-            const localVal = localRaw === null ? null : tryParseJSON(localRaw);
-            const localEmpty = localRaw === null || isEmptyValue(localVal);
-            const serverEmpty = isEmptyValue(serverVal);
-
-            if (localEmpty && !serverEmpty) {
-              try {
-                originSave(k, JSON.stringify(serverVal));
-              } catch (e) {
+            // LÓGICA CORREGIDA: Servidor Manda (Server Authority)
+            // Si el servidor tiene datos, actualizamos el local para estar sincronizados.
+            // Ignoramos si lo local es "más nuevo" porque no tenemos forma de saberlo,
+            // y al iniciar sesión queremos ver el estado real del sistema.
+            if (!isEmptyValue(serverVal)) {
                 try {
-                  originSave(k, String(serverVal));
-                } catch (e2) {}
-              }
+                  const localRaw = localStorage.getItem(k);
+                  if (localRaw !== serverJson) {
+                      console.log('[app-bridge] Sync: Overwriting local ' + k + ' with server data');
+                      originSave(k, serverJson);
+                  }
+                } catch (e) {
+                  console.warn('Error saving server data to local', e);
+                }
             }
           });
           console.log('localStorage populated from server (kv keys):', Object.keys(kv));
@@ -366,6 +371,7 @@
         }
       }
 
+      // Solo empujamos si hay cambios reales hechos por el usuario después de cargar
       await safePushAll();
     } catch (e) {
       console.error('Failed to fetch and populate initial data', e);
