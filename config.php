@@ -1,5 +1,5 @@
 <?php
-// ConfiguraciÃ³n base solo para MySQL (cPanel). Puedes sobreescribir cualquier valor creando config.local.php
+// Configuraci¨®n base solo para MySQL (cPanel). Puedes sobreescribir cualquier valor creando config.local.php
 // o definiendo variables de entorno (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS, CORS_ALLOWED_ORIGIN).
 
 $config = [

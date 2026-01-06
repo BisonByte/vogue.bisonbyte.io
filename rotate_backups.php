@@ -3,6 +3,13 @@
 // - Deletes backup files older than 90 days from storage/backups
 // - Truncates vogue.log if it grows too large
 
+$isCli = PHP_SAPI === 'cli';
+if (!$isCli) {
+    require_once __DIR__ . '/src/bootstrap.php';
+    vogue_start_session();
+    vogue_require_auth();
+}
+
 $storageDir = __DIR__ . '/storage';
 $backupDir  = $storageDir . '/backups';
 $logFile    = $storageDir . '/vogue.log';
@@ -34,4 +41,3 @@ if (is_file($logFile) && filesize($logFile) > 5 * 1024 * 1024) {
 }
 
 echo "OK\n";
-

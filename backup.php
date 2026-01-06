@@ -4,6 +4,13 @@
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/src/bootstrap.php';
+
+// Si se llama por web, requerir sesión autenticada.
+if (PHP_SAPI !== 'cli') {
+    vogue_start_session();
+    vogue_require_auth();
+}
 
 $storageDir = __DIR__ . '/storage';
 $backupDir  = $storageDir . '/backups';

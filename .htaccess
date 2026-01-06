@@ -1,10 +1,30 @@
+Options -Indexes
+
 RewriteEngine On
 
-# Route /api/* requests to the PHP backend
-RewriteCond %{REQUEST_URI} ^/api(/.*)?$ [NC]
-RewriteRule ^api/?(.*)$ api.php [L,QSA]
+# Block direct web access to internal source code
+RewriteRule ^src/ - [F,L]
+RewriteRule ^backend/ - [F,L]
+
+# Block direct access to sensitive root files (schema/docs/logs/config)
+<IfModule mod_authz_core.c>
+  <FilesMatch "^(config(\\.local)?\\.php|db\\.php|db_schema\\.sql|DB_SETUP\\.md|error_log|api\\.php)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "^(config(\\.local)?\\.php|db\\.php|db_schema\\.sql|DB_SETUP\\.md|error_log|api\\.php)$">
+    Order deny,allow
+    Deny from all
+  </FilesMatch>
+</IfModule>
 
 # Serve existing files/directories normally
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule .* - [L]
+
+# SPA fallback for client-side routes (avoid rewriting missing assets with extensions)
+RewriteCond %{REQUEST_URI} !^/api(/|$) [NC]
+RewriteCond %{REQUEST_URI} !\\.[a-zA-Z0-9]{1,8}$
+RewriteRule .* index.html [L]

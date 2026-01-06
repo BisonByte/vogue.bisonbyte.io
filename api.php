@@ -3,24 +3,26 @@
 // Ahora persiste en MySQL (cPanel) en lugar de archivos JSON locales.
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/src/bootstrap.php';
 
 $config = loadConfig();
 $corsOrigin = $config['cors_allowed_origin'] ?? '*';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: ' . $corsOrigin);
+header('Vary: Origin');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 // Usuario administrador (se puede mover a BD más adelante).
-// Contraseña actual: 123 (password_hash).
+// Contraseña actual: 123 (password_hash) si no se define ADMIN_PASSWORD_HASH.
 $ADMIN_USER = [
-    'username' => 'admin',
-    'password_hash' => '$2y$10$a/E5YHHMGHoKLZbI.tU8w.U8dsXo3iIE.CUzK/oQuaXfOFcyfxOSG',
-    'nombre' => 'Administrador'
+    'username' => getenv('ADMIN_USERNAME') ?: 'admin',
+    'password_hash' => getenv('ADMIN_PASSWORD_HASH') ?: '$2y$10$a/E5YHHMGHoKLZbI.tU8w.U8dsXo3iIE.CUzK/oQuaXfOFcyfxOSG',
+    'nombre' => getenv('ADMIN_NAME') ?: 'Administrador',
 ];
 
-session_start();
+vogue_start_session();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -28,11 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 function requireAuth() {
-    if (empty($_SESSION['user'])) {
-        http_response_code(401);
-        echo json_encode(['error' => 'Not authenticated']);
-        exit;
-    }
+    vogue_require_auth();
 }
 
 $storageDir = __DIR__ . '/storage';
@@ -65,7 +63,7 @@ function logAction($action, $details = []) {
         'action' => $action,
         'details' => $details
     ];
-    @file_put_contents($logFile, json_encode($entry) . PHP_EOL, FILE_APPEND);
+    @file_put_contents($logFile, json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
 
 function readRateData() {
@@ -82,7 +80,9 @@ function writeRateData($data) {
     global $storageDir;
     ensureStorageDir();
     $file = $storageDir . '/rate_limit.json';
-    @file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT));
+    $tmp = $file . '.tmp';
+    @file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    @rename($tmp, $file);
 }
 
 function loginRateCheck($ip) {
@@ -122,9 +122,7 @@ function loginRateReset($ip) {
 }
 
 function respond($data, $code = 200) {
-    http_response_code($code);
-    echo json_encode($data);
-    exit;
+    vogue_json_response($data, $code);
 }
 
 // Routing
@@ -157,6 +155,7 @@ try {
                 respond(['error' => 'Credenciales incorrectas'], 401);
             }
             loginRateReset($ip);
+            session_regenerate_id(true);
             $_SESSION['user'] = [
                 'username' => $ADMIN_USER['username'],
                 'nombre' => $ADMIN_USER['nombre']

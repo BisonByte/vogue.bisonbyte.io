@@ -26,6 +26,19 @@ CREATE TABLE IF NOT EXISTS clients (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS sync_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    key_name VARCHAR(191) NOT NULL,
+    event VARCHAR(64) NOT NULL,
+    username VARCHAR(191) NULL,
+    ip VARCHAR(45) NULL,
+    user_agent VARCHAR(255) NULL,
+    summary_json LONGTEXT NULL,
+    created_at_ms BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_sync_events_key_created (key_name, created_at_ms)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Datos demo/tester (se insertan solo si la tabla está vacía)
 INSERT INTO kv_store (key_name, value_json) VALUES
 ('demo_mensaje', JSON_OBJECT('es', 'Datos guardados en MySQL (cPanel).', 'en', 'Server data now lives in MySQL.'))
