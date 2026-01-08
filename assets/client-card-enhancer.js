@@ -314,6 +314,7 @@
       if (btn.dataset.orderBound === 'true') return;
       btn.dataset.orderBound = 'true';
       btn.addEventListener('click', (event) => {
+        if (event.__orderEditHandled) return;
         event.preventDefault();
         event.stopPropagation();
         handleOrderEditButton(btn);
@@ -339,9 +340,10 @@
         }
         const btn = getClosestTarget(event.target, '.client-order-edit');
         if (!btn) return;
+        if (event.__orderEditHandled) return;
         event.preventDefault();
         event.stopPropagation();
-        if (btn.dataset.orderBound === 'true') return;
+        event.__orderEditHandled = true;
         handleOrderEditButton(btn);
       },
       true
