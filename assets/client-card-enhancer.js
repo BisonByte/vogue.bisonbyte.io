@@ -241,6 +241,7 @@
         renderOrderChip('Pedido', order.pedidoCompletado),
         renderOrderChip('Entrega', order.entregado)
       ].join('');
+      const orderPayload = encodeOrderPayload(order);
       const clientId = card.dataset.clientId || '';
       const clientIndex = card.dataset.clientIndex || '';
       const clientName = card.dataset.clientName || '';
@@ -254,7 +255,7 @@
         '  </div>',
         '  <div class="client-order-side">',
         '    <div class="client-order-amount">' + amount + '</div>',
-        '    <button type="button" class="client-order-edit" data-order-id="' + order.id + '" data-client-id="' + clientId + '" data-client-index="' + clientIndex + '" data-client-name="' + clientName + '">Editar</button>',
+        '    <button type="button" class="client-order-edit" data-order-id="' + order.id + '" data-order-json="' + orderPayload + '" data-client-id="' + clientId + '" data-client-index="' + clientIndex + '" data-client-name="' + clientName + '">Editar</button>',
         '  </div>',
         '</div>'
       ].join('');
@@ -273,6 +274,37 @@
   function renderOrderChip(label, isActive) {
     const cls = isActive ? 'client-order-chip is-active' : 'client-order-chip';
     return '<span class="' + cls + '">' + label + '</span>';
+  }
+
+  function encodeOrderPayload(order) {
+    if (!order) return '';
+    try {
+      return encodeURIComponent(JSON.stringify({
+        id: order.id,
+        fecha: order.fecha || '',
+        enlace: order.enlace || '',
+        enlaceActualizado: order.enlaceActualizado || '',
+        direccionEnvio: order.direccionEnvio || '',
+        monto: order.monto,
+        descuentoPct: order.descuentoPct,
+        descripcion: order.descripcion || '',
+        pagoCompletado: !!order.pagoCompletado,
+        pedidoCompletado: !!order.pedidoCompletado,
+        entregado: !!order.entregado,
+        createdAt: order.createdAt
+      }));
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function parseOrderPayload(raw) {
+    if (!raw) return null;
+    try {
+      return JSON.parse(decodeURIComponent(raw));
+    } catch (e) {
+      return null;
+    }
   }
 
   function handleOrderEditButton(btn) {
@@ -300,6 +332,10 @@
     }
     if (openOrderModalByOrderId(orderId)) {
       console.log('✓ Modal abierto por orderId', { orderId });
+      return true;
+    }
+    if (openOrderModalFromButton(btn)) {
+      console.log('✓ Modal abierto desde datos del botón', { orderId, clientId: data.clientId });
       return true;
     }
     console.error('✗ No se pudo abrir el pedido', { orderId, data, hasCard: !!card });
@@ -991,6 +1027,37 @@
     return modal;
   }
 
+  function populateOrderModal(modal, order, clientName, labelIndex) {
+    const subtitle = modal.querySelector('[data-order-subtitle="true"]');
+    if (subtitle) {
+      subtitle.textContent = (clientName || 'Cliente') + ' · ' + formatOrderLabel(order, labelIndex);
+    }
+
+    const form = modal.querySelector('form');
+    if (form) {
+      const getFormInput = (name) => form.querySelector('input[name="' + name + '"], textarea[name="' + name + '"]');
+      const enlaceInput = getFormInput('orderEnlace');
+      const enlaceActualizadoInput = getFormInput('orderEnlaceActualizado');
+      const direccionInput = getFormInput('orderDireccion');
+      const fechaInput = getFormInput('orderFecha');
+      const montoInput = getFormInput('orderMonto');
+      const descuentoInput = getFormInput('orderDescuento');
+      const notasInput = getFormInput('orderNotas');
+
+      if (enlaceInput) enlaceInput.value = order.enlace || '';
+      if (enlaceActualizadoInput) enlaceActualizadoInput.value = order.enlaceActualizado || '';
+      if (direccionInput) direccionInput.value = order.direccionEnvio || '';
+      if (fechaInput) fechaInput.value = order.fecha || '';
+      if (montoInput) montoInput.value = Number.isFinite(order.monto) && order.monto > 0 ? order.monto : '';
+      if (descuentoInput) descuentoInput.value = order.descuentoPct ? order.descuentoPct : '';
+      if (notasInput) notasInput.value = order.descripcion || '';
+    }
+
+    setToggleGroupState(modal.querySelector('[data-field="orderPago"]'), !!order.pagoCompletado);
+    setToggleGroupState(modal.querySelector('[data-field="orderEstado"]'), !!order.pedidoCompletado);
+    setToggleGroupState(modal.querySelector('[data-field="orderEntrega"]'), !!order.entregado);
+  }
+
   function openOrderModal(card, orderId) {
     const clients = loadClients();
     const client = resolveClientFromCard(clients, card) || CARD_CLIENT_CACHE.get(card);
@@ -1085,45 +1152,15 @@
 
     modal._orders = orders;
     modal.dataset.orderId = order.id;
+    modal.dataset.clientName = client.nombre || '';
 
-    const subtitle = modal.querySelector('[data-order-subtitle="true"]');
-    if (subtitle) {
-      const sortedIndex = orders
-        .slice()
-        .sort((a, b) => getOrderSortValue(b) - getOrderSortValue(a))
-        .findIndex((item) => item.id === order.id);
-      const labelIndex = sortedIndex >= 0 ? sortedIndex : orderIndex;
-      subtitle.textContent = (client.nombre || 'Cliente') + ' · ' + formatOrderLabel(order, labelIndex);
-    }
+    const sortedIndex = orders
+      .slice()
+      .sort((a, b) => getOrderSortValue(b) - getOrderSortValue(a))
+      .findIndex((item) => item.id === order.id);
+    const labelIndex = sortedIndex >= 0 ? sortedIndex : orderIndex;
 
-    const form = modal.querySelector('form');
-    if (!form) {
-      modal.classList.add('is-open');
-      return true;
-    }
-    
-    // Acceder a los campos de forma más segura
-    const getFormInput = (name) => form.querySelector('input[name="' + name + '"], textarea[name="' + name + '"]');
-    
-    const enlaceInput = getFormInput('orderEnlace');
-    const enlaceActualizadoInput = getFormInput('orderEnlaceActualizado');
-    const direccionInput = getFormInput('orderDireccion');
-    const fechaInput = getFormInput('orderFecha');
-    const montoInput = getFormInput('orderMonto');
-    const descuentoInput = getFormInput('orderDescuento');
-    const notasInput = getFormInput('orderNotas');
-    
-    if (enlaceInput) enlaceInput.value = order.enlace || '';
-    if (enlaceActualizadoInput) enlaceActualizadoInput.value = order.enlaceActualizado || '';
-    if (direccionInput) direccionInput.value = order.direccionEnvio || '';
-    if (fechaInput) fechaInput.value = order.fecha || '';
-    if (montoInput) montoInput.value = Number.isFinite(order.monto) && order.monto > 0 ? order.monto : '';
-    if (descuentoInput) descuentoInput.value = order.descuentoPct ? order.descuentoPct : '';
-    if (notasInput) notasInput.value = order.descripcion || '';
-
-    setToggleGroupState(modal.querySelector('[data-field="orderPago"]'), !!order.pagoCompletado);
-    setToggleGroupState(modal.querySelector('[data-field="orderEstado"]'), !!order.pedidoCompletado);
-    setToggleGroupState(modal.querySelector('[data-field="orderEntrega"]'), !!order.entregado);
+    populateOrderModal(modal, order, client.nombre || '', labelIndex);
 
     console.log('✓ Mostrando modal de edición de pedido', {
       orderId: order.id,
@@ -1131,6 +1168,29 @@
       orderAmount: order.monto,
       orderDate: order.fecha
     });
+    modal.classList.add('is-open');
+    return true;
+  }
+
+  function openOrderModalFromButton(btn) {
+    if (!btn) return false;
+    const payload = parseOrderPayload(btn.dataset.orderJson || '');
+    if (!payload) return false;
+    const order = normalizeOrder(payload, 0);
+    const modal = ensureOrderModal();
+    const card = btn.closest('.client-card');
+    const clientName =
+      btn.dataset.clientName ||
+      (card && card.dataset ? card.dataset.clientName : '') ||
+      '';
+
+    modal.dataset.clientId = btn.dataset.clientId || (card && card.dataset ? card.dataset.clientId || '' : '');
+    modal.dataset.clientIndex = btn.dataset.clientIndex || (card && card.dataset ? card.dataset.clientIndex || '' : '');
+    modal.dataset.clientName = clientName;
+    modal.dataset.orderId = order.id;
+    modal._orders = null;
+
+    populateOrderModal(modal, order, clientName, 0);
     modal.classList.add('is-open');
     return true;
   }
@@ -1326,6 +1386,15 @@
     }
     if (index < 0) {
       index = Number(modal.dataset.clientIndex || -1);
+    }
+    if (index < 0) {
+      const clientName = modal.dataset.clientName || '';
+      if (clientName) {
+        const normalized = normalizeText(clientName);
+        index = clients.findIndex((client) => {
+          return client && normalizeText(client.nombre) === normalized;
+        });
+      }
     }
     if (index < 0 || !clients[index]) {
       closeOrderModal();
